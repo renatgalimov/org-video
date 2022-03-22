@@ -1,15 +1,15 @@
-;;; ox-ffmpeg.el --- Export org-mode nodes as video files
+;;; org-video.el --- Export org-mode nodes as video files -*- coding: utf-8; lexical-binding: t; -*-
 ;;
-;; Filename: ox-ffmpeg.el
-;; Description:
+;; Filename: org-video.el
+;; Description: Make videos from org-mode documents
 ;; Author: Renat Galimov
 ;; Maintainer:
 ;; Created: Mon Feb 14 05:12:23 2022 (+0300)
-;; Version:
-;; Package-Requires: ()
-;; Last-Updated: Sat Feb 19 18:04:19 2022 (+0300)
+;; Version: 0.0.1
+;; Package-Requires: ((emacs "27.2") (org "9.4") (mimetypes "20201115.1605"))
+;; Last-Updated: Sun Feb 20 17:29:15 2022 (+0300)
 ;;           By: Renat Galimov
-;;     Update #: 747
+;;     Update #: 774
 ;; URL:
 ;; Doc URL:
 ;; Keywords:
@@ -18,7 +18,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 ;;; Commentary:
-;;
 ;;
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -51,8 +50,22 @@
 (require 'org-attach)
 (require 'mimetypes)
 
+(defgroup org-video nil
+  "Convert org documents to video slideshows."
+  :tag "Org Video"
+  :group 'org)
 
-(defun ox-ffmpeg-export-slide-to-pdf()
+(defcustom org-video-default-output-format "mp4"
+  "The format of the resulting output file.
+
+To see all output formats supported by ffmpeg run
+
+  ffmpeg -formats"
+  :group 'org-video
+  :package-version '(org-video . "0.0.1")
+  :type '(string :tag "Default output format"))
+
+(defun org-video-export-slide-to-pdf()
   "Export current node as a PDF file."
   (let ((outfile (make-temp-file "org-export" nil ".tex"))
         (org-latex-classes
@@ -76,7 +89,7 @@
             (delete-file tex-path nil)
             pdf-path)))))
 
-(defun ox-ffmpeg-get-org-link(video-source)
+(defun org-video-get-org-link(video-source)
   "Return a path to VIDEO-SOURCE org link."
 
   (when (not (stringp video-source))
@@ -94,7 +107,7 @@
       path)))
 
 
-(defun ox-ffmpeg-get-source-path(video-source)
+(defun org-video-get-source-path(video-source)
   "Return a source path of the property.
 
 Automatically determine the path if the VIDEO-SOURCE is an org
@@ -103,12 +116,12 @@ Automatically determine the path if the VIDEO-SOURCE is an org
 Ensure that the video source exists.
 Follow symlinks."
   (let ((absolute-path (file-truename (if (string-match-p "\\[\\[.*\\]\\]" video-source)
-                                          (ox-ffmpeg-get-org-link video-source)
+                                          (org-video-get-org-link video-source)
                                         video-source))))
     (when (file-exists-p absolute-path)
       absolute-path)))
 
-(defun ox-ffmpeg-get-slide-type()
+(defun org-video-get-slide-type()
   "Return slide type of the org entry at point.
 
 Possible return values are:
@@ -119,66 +132,66 @@ Returns nil if return slide type cannot be determined."
   (let ((video-source (org-entry-get nil "VIDEO-SOURCE")))
     (when (stringp video-source)
       (if (equal "latex" video-source) "latex"
-        (let ((file-path (ox-ffmpeg-get-source-path video-source)))
+        (let ((file-path (org-video-get-source-path video-source)))
           (if (stringp file-path)
               (let ((mimetype (mimetypes-guess-mime file-path)))
                 (when (and (stringp mimetype) (string-match-p "^video/.*$" mimetype))
                   "video"))))))))
 
-(defun ox-ffmpeg-get-source ()
+(defun org-video-get-source ()
   "Make or get a source link to the slide file."
-  (let ((slide-type (ox-ffmpeg-get-slide-type)))
-    (cond ((equal slide-type "latex") (ox-ffmpeg-latex-get-source))
-          ((equal slide-type "video") (ox-ffmpeg-video-get-source))
+  (let ((slide-type (org-video-get-slide-type)))
+    (cond ((equal slide-type "latex") (org-video-latex-get-source))
+          ((equal slide-type "video") (org-video-video-get-source))
           (t nil))))
 
-(defun ox-ffmpeg-latex-get-slide-duration-seconds ()
+(defun org-video-latex-get-slide-duration-seconds ()
   "Get how much time the latex SLIDE will be visible on the screen."
   5.0)
 
-(defun ox-ffmpeg-video-get-slide-duration-seconds(slide-source)
+(defun org-video-video-get-slide-duration-seconds(slide-source)
   "Get how much time the video slide at SLIDE-SOURCE will be visible on the screen."
-  (let ((probe-data (ox-ffmpeg-video-probe slide-source)))
+  (let ((probe-data (org-video-video-probe slide-source)))
     (string-to-number (gethash "duration" (plist-get probe-data :video-stream)))))
 
-(defun ox-ffmpeg-get-slide-duration-seconds (slide-type slide-source)
+(defun org-video-get-slide-duration-seconds (slide-type slide-source)
   "Get how much time the slide of SLIDE-TYPE at SLIDE-SOURCE will be visible on the screen."
-  (cond ((equal slide-type "latex") (ox-ffmpeg-latex-get-slide-duration-seconds))
-        ((equal slide-type "video") (ox-ffmpeg-video-get-slide-duration-seconds slide-source))
+  (cond ((equal slide-type "latex") (org-video-latex-get-slide-duration-seconds))
+        ((equal slide-type "video") (org-video-video-get-slide-duration-seconds slide-source))
         (t nil)))
 
-(defun ox-ffmpeg-get-slide()
+(defun org-video-get-slide()
   "Make a slide object from the org entry at point."
-  (let ((slide-type (ox-ffmpeg-get-slide-type)))
+  (let ((slide-type (org-video-get-slide-type)))
     (when (stringp slide-type)
-      (let ((slide-source (ox-ffmpeg-get-source)))
-      `(:slide-type ,slide-type :slide-source ,(ox-ffmpeg-get-source) :duration ,(ox-ffmpeg-get-slide-duration-seconds slide-type slide-source))))))
+      (let ((slide-source (org-video-get-source)))
+      `(:slide-type ,slide-type :slide-source ,(org-video-get-source) :duration ,(org-video-get-slide-duration-seconds slide-type slide-source))))))
 
-(defun ox-ffmpeg-get-slides(&optional scope)
+(defun org-video-get-slides(&optional scope)
   "Get a list of slide objects in this buffer.
 
 SCOPE determines the scope of this command. Check the SCOPE
 documentation of `org-map-entries'."
 
-  (seq-filter (lambda (item) (not (null item))) (org-map-entries (lambda() (ox-ffmpeg-get-slide)) t (or scope 'file))))
+  (seq-filter (lambda (item) (not (null item))) (org-map-entries (lambda() (org-video-get-slide)) t (or scope 'file))))
 
-(defun ox-ffmpeg-get-filtergraph ()
-  (ox-ffmpeg-slides-to-filtergraph (ox-ffmpeg-get-slides)))
+(defun org-video-get-filtergraph ()
+  (org-video-slides-to-filtergraph (org-video-get-slides)))
 
-(defun ox-ffmpeg-latex-get-source()
+(defun org-video-latex-get-source()
   "Get source file for a latex slide."
-  (let* ((pdf-path (ox-ffmpeg-export-slide-to-pdf))
-         (png-path (ox-ffmpeg-pdf-to-png pdf-path)))
+  (let* ((pdf-path (org-video-export-slide-to-pdf))
+         (png-path (org-video-pdf-to-png pdf-path)))
     (delete-file pdf-path nil)
     png-path))
 
-(defun ox-ffmpeg-video-get-source()
+(defun org-video-video-get-source()
   "Get source file for a video slide."
   (let ((video-source (org-entry-get nil "VIDEO-SOURCE")))
     (when (stringp video-source)
-      (ox-ffmpeg-get-source-path video-source))))
+      (org-video-get-source-path video-source))))
 
-(defun ox-ffmpeg-file-get-source-path()
+(defun org-video-file-get-source-path()
   "Get an absolute path to slide's source.
 
 This function checks that the source file exists and raises
@@ -194,7 +207,7 @@ errors if it cannot be found."
         (error "Source not found: %s/%s" (org-attach-dir) source))
       source-path)))
 
-(defun ox-ffmpeg-pdf-to-png(pdf-path)
+(defun org-video-pdf-to-png(pdf-path)
   "Convert file at PDF-PATH to a PNG file."
   (let* ((png-path (concat (file-name-sans-extension pdf-path) ".png"))
          (exit-code (call-process
@@ -206,7 +219,7 @@ errors if it cannot be found."
       (display-buffer "*Convert output*")
       (error "Convert command failed"))))
 
-(defun ox-ffmpeg-slide-filter(input-id duration)
+(defun org-video-slide-filter(input-id duration)
   "Make an ffmpeg filter that plays a slide with INPUT-ID.
 
 DURATION is to control when to fade out."
@@ -215,50 +228,50 @@ DURATION is to control when to fade out."
         (format "[%s]fps=25, scale=w=1920:h=1080:force_original_aspect_ratio=decrease, pad=1920:1080:(ow-iw)/2:(oh-ih)/2, fade=type=in:duration=%s, fade=type=out:start_time=%s:duration=%s[v%s]" input-id fade-duration (- duration fade-duration) fade-duration input-id)
       (format "[%s]fps=25[v%s]" input-id input-id))))
 
-(defun ox-ffmpeg-filter-concat (input-count)
+(defun org-video-filter-concat (input-count)
   "Make an ffmpeg filter that concatinates INPUT-COUNT slides into one video slide."
   (format "%s concat=n=%s:v=1:a=0, fps=25, realtime [v]" (mapconcat (lambda (input-id) (format "[v%s]" input-id)) (number-sequence 0 (- input-count 1)) " ") input-count))
 
-(defun ox-ffmpeg-slides-to-filtergraph(slides)
+(defun org-video-slides-to-filtergraph(slides)
   "Produce an ffmpeg filterfraph for given SLIDES."
   (let* ((input-ids (number-sequence 0 (- (length slides) 1)))
-         (slide-filters (cl-mapcar (lambda (slide input-id) (ox-ffmpeg-slide-filter input-id (plist-get slide :duration))) slides input-ids)))
-    (mapconcat 'identity (append slide-filters `(,(ox-ffmpeg-filter-concat (length slides)))) "; ")))
+         (slide-filters (cl-mapcar (lambda (slide input-id) (org-video-slide-filter input-id (plist-get slide :duration))) slides input-ids)))
+    (mapconcat 'identity (append slide-filters `(,(org-video-filter-concat (length slides)))) "; ")))
 
-(defun ox-ffmpeg-latex-slide-to-ffmpeg-input(slide)
+(defun org-video-latex-slide-to-ffmpeg-input(slide)
   "Produce ffmpeg input arguments for latex SLIDE."
   `("-r" "1/5" "-i" ,(plist-get slide :slide-source)))
 
-(defun ox-ffmpeg-video-slide-to-ffmpeg-input(slide)
+(defun org-video-video-slide-to-ffmpeg-input(slide)
   "Produce ffmpeg input arguments for latex SLIDE."
   `("-i" ,(plist-get slide :slide-source)))
 
-(defun ox-ffmpeg-slide-to-ffmpeg-input(slide)
+(defun org-video-slide-to-ffmpeg-input(slide)
   "Produce ffmpeg input argument for SLIDE."
   (let ((slide-type (plist-get slide :slide-type)))
-    (cond ((equal slide-type "latex") (ox-ffmpeg-latex-slide-to-ffmpeg-input slide))
-          ((equal slide-type "video") (ox-ffmpeg-video-slide-to-ffmpeg-input slide))
+    (cond ((equal slide-type "latex") (org-video-latex-slide-to-ffmpeg-input slide))
+          ((equal slide-type "video") (org-video-video-slide-to-ffmpeg-input slide))
           (t (error "Unsupported slide type: %s" slide-type)))))
 
-(defun ox-ffmpeg-slides-to-ffmpeg-inputs(slides)
+(defun org-video-slides-to-ffmpeg-inputs(slides)
   "Produce ffmpeg input arguments for SLIDES."
   (apply 'cl-concatenate 'list
-         (mapcar #'ox-ffmpeg-slide-to-ffmpeg-input slides)))
+         (mapcar #'org-video-slide-to-ffmpeg-input slides)))
 
-(defun ox-ffmpeg-slides-to-ffmpeg-args(slides)
+(defun org-video-slides-to-ffmpeg-args(slides)
   "Produce ffmpeg arguments to play SLIDES."
   (cl-concatenate
    'list
-   (ox-ffmpeg-slides-to-ffmpeg-inputs slides)
-   `("-filter_complex" ,(ox-ffmpeg-slides-to-filtergraph slides))
+   (org-video-slides-to-ffmpeg-inputs slides)
+   `("-filter_complex" ,(org-video-slides-to-filtergraph slides))
    ))
 
-(defun ox-ffmpeg-slides-to-dot()
+(defun org-video-slides-to-dot()
   "Produce a dot file of a filegraph for given SLIDES."
-  (let* ((slides (ox-ffmpeg-get-slides))
+  (let* ((slides (org-video-get-slides))
          (input-ids (number-sequence 0 (- (length slides) 1)))
          (inputs (mapconcat (lambda (input-id) (format "nullsrc [%s]" input-id)) input-ids "; "))
-         (filtergraph (ox-ffmpeg-slides-to-filtergraph slides))
+         (filtergraph (org-video-slides-to-filtergraph slides))
          (full-graph (concat inputs ";" filtergraph "; [v] nullsink"))
          (full-graph-file (make-temp-file "graph2dot" nil ".txt" full-graph))
          (out-dot-file (make-temp-file "graph2dot" nil ".dot"))
@@ -271,15 +284,15 @@ DURATION is to control when to fade out."
     (delete-file out-dot-file)
     (find-file-other-window out-png-file)))
 
-(defun ox-ffmpeg-video-stream-p(stream)
+(defun org-video-video-stream-p(stream)
   "Check whether the STREAM document is a video stream."
   (when (equal (gethash "codec_type" stream) "video") stream))
 
-(defun ox-ffmpeg-get-first-video-stream (streams)
+(defun org-video-get-first-video-stream (streams)
   "Get the first video stream from the list of STREAMS."
-  (seq-some #'ox-ffmpeg-video-stream-p streams))
+  (seq-some #'org-video-video-stream-p streams))
 
-(defun ox-ffmpeg-video-probe(video-path)
+(defun org-video-video-probe(video-path)
   "Use ffprobe to detect video parameters of a file at VIDEO-PATH."
   (with-temp-buffer
     (let* ((stderr-file (make-temp-file "ffprobe")))
@@ -293,21 +306,39 @@ DURATION is to control when to fade out."
     (goto-char (point-min))
     (let* ((video-info (json-parse-buffer))
            (streams (gethash "streams" video-info)))
-      `(:video-stream ,(ox-ffmpeg-get-first-video-stream streams)))))
+      `(:video-stream ,(org-video-get-first-video-stream streams)))))
 
-(defun ox-ffmpeg-preview-command()
-  (let ((slides (ox-ffmpeg-get-slides)))
+(defun org-video-preview-command()
+  (let ((slides (org-video-get-slides)))
     (mapconcat 'shell-quote-argument
-               (apply 'cl-concatenate 'list `(("ffmpeg") ,(ox-ffmpeg-slides-to-ffmpeg-args slides) ("-map" "[v]" "-r" "25" "-f" "opengl" "org-ffmpeg"))) " ")))
-    ;; (apply 'cl-concatenate 'list '((1) (2)))
-    ;; (cl-concatenate 'list '((1) (2)))
-    ;; (mapconcat 'shell-quote-argument `("ffmpeg" "-i" ,(ox-ffmpeg-get-source-path) "-filter_complex" ,(ox-ffmpeg-video-slide-filter 0) "-map" "[v0]" "-f" "opengl" "org-ffmpeg") " "))
+               (apply 'cl-concatenate 'list `(("ffmpeg") ,(org-video-slides-to-ffmpeg-args slides) ("-map" "[v]" "-r" "25" "-f" "opengl" "org-ffmpeg"))) " ")))
 
-(defun ox-ffmpeg-preview()
-  (async-shell-command (ox-ffmpeg-preview-command)))
+(defun org-video-preview()
+  (async-shell-command (org-video-preview-command)))
 
 ;;; Interactive function
 
 
-(provide 'ox-ffmpeg)
-;;; ox-ffmpeg.el ends here
+;;;###autoload
+(defun org-video-export-to-video
+    (&optional async subtreep visible-only body-only ext-plist)
+  "Export current buffer to a video file.
+
+ASYNC is ignored.
+
+When optional argument SUBTREEP is non-nil, export the sub-tree
+at point, extracting information from the headline properties
+first.
+
+When optional argument VISIBLE-ONLY is non-nil, don't export
+contents of hidden elements.
+
+BODY-ONLY is ignored."
+
+  (let ((outfile (org-export-output-file-name ".mp4" subtreep)))
+
+    ))
+
+
+(provide 'org-video)
+;;; org-video.el ends here
